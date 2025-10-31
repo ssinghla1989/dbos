@@ -48,75 +48,6 @@ type CallExternalAPIStepResult struct {
 	DurationMs int64  `json:"duration_ms"`
 }
 
-// ValidationError indicates invalid step parameters that should not be retried.
-type ValidationError struct {
-	msg string
-}
-
-func (e *ValidationError) Error() string {
-	if e == nil {
-		return ""
-	}
-	return e.msg
-}
-
-// TransientError represents a retryable failure.
-type TransientError struct {
-	Err        error
-	RetryAfter time.Duration
-	StatusCode int
-}
-
-func (e *TransientError) Error() string {
-	if e == nil {
-		return ""
-	}
-	if e.Err != nil {
-		return e.Err.Error()
-	}
-	return "transient error"
-}
-
-func (e *TransientError) Unwrap() error {
-	if e == nil {
-		return nil
-	}
-	return e.Err
-}
-
-// PermanentError represents a non-retryable failure.
-type PermanentError struct {
-	StatusCode int
-	Msg        string
-	Err        error
-}
-
-func (e *PermanentError) Error() string {
-	if e == nil {
-		return ""
-	}
-	if e.Msg != "" {
-		return e.Msg
-	}
-	if e.Err != nil {
-		return e.Err.Error()
-	}
-	return "permanent error"
-}
-
-func (e *PermanentError) Unwrap() error {
-	if e == nil {
-		return nil
-	}
-	return e.Err
-}
-
-var (
-	_ error = (*ValidationError)(nil)
-	_ error = (*TransientError)(nil)
-	_ error = (*PermanentError)(nil)
-)
-
 const (
 	defaultTimeoutSeconds   = 10
 	defaultMaxAttempts      = 3
@@ -162,7 +93,7 @@ func CallExternalAPIStep(ctx context.Context, params CallExternalAPIStepParams) 
 		reqBody := bytes.NewReader(params.Body)
 		req, err := http.NewRequestWithContext(ctx, params.Method, params.URL, reqBody)
 		if err != nil {
-			return CallExternalAPIStepResult{}, &ValidationError{msg: fmt.Sprintf("failed to build request: %v", err)}
+			return CallExternalAPIStepResult{}, &ValidationError{Msg: fmt.Sprintf("failed to build request: %v", err)}
 		}
 
 		for k, v := range params.Headers {
@@ -342,20 +273,20 @@ func normalizeMethod(method string) string {
 
 func validateParams(params CallExternalAPIStepParams) error {
 	if params.URL == "" {
-		return &ValidationError{msg: "url is required"}
+		return &ValidationError{Msg: "url is required"}
 	}
 	if _, err := url.ParseRequestURI(params.URL); err != nil {
-		return &ValidationError{msg: fmt.Sprintf("invalid url: %v", err)}
+		return &ValidationError{Msg: fmt.Sprintf("invalid url: %v", err)}
 	}
 
 	switch params.Method {
 	case http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete:
 	default:
-		return &ValidationError{msg: fmt.Sprintf("unsupported method: %s", params.Method)}
+		return &ValidationError{Msg: fmt.Sprintf("unsupported method: %s", params.Method)}
 	}
 
 	if requiresIdempotencyKey(params.Method) && params.IdempotencyKey == "" {
-		return &ValidationError{msg: "idempotency_key is required for mutating methods"}
+		return &ValidationError{Msg: "idempotency_key is required for mutating methods"}
 	}
 
 	return nil

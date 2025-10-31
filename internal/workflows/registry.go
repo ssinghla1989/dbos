@@ -39,7 +39,10 @@ func Initialize(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (db
 }
 
 func registerWorkflows(ctx dbos.DBOSContext) error {
-	// No workflows to register yet. Add workflow registrations here.
-	_ = ctx
+	if ctx == nil {
+		return fmt.Errorf("dbos context is not initialized")
+	}
+
+	dbos.RegisterWorkflow(ctx, scheduledCallbackWorkflowEntry, dbos.WithWorkflowName(scheduledCallbackWorkflowName))
 	return nil
 }
