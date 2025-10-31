@@ -1,0 +1,16 @@
+# Build output
+/bin/
+/out/
+
+# Dependencies
+/vendor/
+
+# Local environment
+.env
+.env.local
+
+# Misc
+*.log
+*.db
+coverage.out
+
