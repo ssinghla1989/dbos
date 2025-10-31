@@ -22,6 +22,14 @@ import (
 	"github.com/ssinghl/dbos/internal/workflows"
 )
 
+var (
+	beginTxFn                        = db.BeginTx
+	execFn                           = db.Exec
+	queryRowFn                       = db.QueryRow
+	startScheduledCallbackWorkflowFn = workflows.StartScheduledCallbackWorkflow
+	nowFn                            = func() time.Time { return time.Now().UTC() }
+)
+
 // Handlers bundles HTTP handlers for the API surface.
 // TODO: refactor to inject dedicated services once the scheduler is feature-complete.
 type Handlers struct {
@@ -138,7 +146,7 @@ func (h *Handlers) ScheduleCallback(c *gin.Context) {
 		maxAttempts = *req.MaxAttempts
 	}
 
-	tx, err := db.BeginTx(ctx, h.dbPool, pgx.TxOptions{})
+	tx, err := beginTxFn(ctx, h.dbPool, pgx.TxOptions{})
 	if err != nil {
 		h.internalError(c, "begin transaction", err)
 		return
@@ -149,7 +157,7 @@ func (h *Handlers) ScheduleCallback(c *gin.Context) {
 
 	if idempotencyKey != "" {
 		var existingJobID uuid.UUID
-		row, err := db.QueryRow(ctx, tx, `SELECT id FROM scheduled_callbacks WHERE idempotency_key = $1`, idempotencyKey)
+		row, err := queryRowFn(ctx, tx, `SELECT id FROM scheduled_callbacks WHERE idempotency_key = $1`, idempotencyKey)
 		if err != nil {
 			h.internalError(c, "lookup idempotency key", err)
 			return
@@ -202,7 +210,7 @@ func (h *Handlers) ScheduleCallback(c *gin.Context) {
 		max_attempts
 	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
-	if _, err := db.Exec(ctx, tx, insertSQL,
+	if _, err := execFn(ctx, tx, insertSQL,
 		jobID,
 		idempotencyParam,
 		req.CallbackURL,
@@ -230,7 +238,7 @@ func (h *Handlers) ScheduleCallback(c *gin.Context) {
 	)
 
 	go func(job string) {
-		if err := workflows.StartScheduledCallbackWorkflow(context.Background(), h.dbosCtx, job); err != nil {
+		if err := startScheduledCallbackWorkflowFn(context.Background(), h.dbosCtx, job); err != nil {
 			h.logger.Error("failed to start scheduled callback workflow",
 				zap.String("job_id", job),
 				zap.Error(err),
@@ -282,7 +290,7 @@ func validateScheduleRequest(_ context.Context, req scheduleCallbackRequest) err
 }
 
 func resolveScheduledFor(req scheduleCallbackRequest) (time.Time, error) {
-	now := time.Now().UTC()
+	now := nowFn()
 	if req.DelaySeconds != nil {
 		dl := time.Duration(*req.DelaySeconds) * time.Second
 		return now.Add(dl), nil
